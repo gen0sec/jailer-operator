@@ -29,3 +29,7 @@ jobs:
           fi
       - run: go vet ./...
       - run: go test -race ./...
+      # The CRD schema is what the API server enforces, so a stale manifest
+      # means the cluster accepts values the types no longer allow.
+      - name: Generated files are up to date
+        run: make verify

@@ -1,0 +1,23 @@
+apiVersion: jailer.gen0sec.com/v1alpha1
+kind: JailerPolicy
+metadata:
+  name: prod-web
+spec:
+  namespaceSelector:
+    matchLabels:
+      tier: prod
+  podSelector:
+    matchLabels:
+      app: web
+  # Flags are permissive by name: false is a restriction. A flag no policy
+  # sets stays unset rather than being granted.
+  flags:
+    allowNetwork: true
+    allowPtrace: false
+  ipRules:
+    - cidr: 169.254.169.254/32
+      direction: connect
+      allow: false
+  filePaths:
+    - pattern: /var/run/secrets/*
+      allow: false
