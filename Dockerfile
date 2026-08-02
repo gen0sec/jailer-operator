@@ -1,5 +1,5 @@
 # Build the manager against the same Go version go.mod asks for.
-FROM golang:1.24 AS build
+FROM golang:1.26 AS build
 WORKDIR /src
 
 # Dependencies first, so source edits do not refetch the module graph.
