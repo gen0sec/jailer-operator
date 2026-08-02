@@ -15,12 +15,15 @@ COPY internal/ internal/
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w" -o /out/manager ./cmd/manager
+    go build -trimpath -ldflags="-s -w" -o /out/manager ./cmd/manager && \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" -o /out/agent ./cmd/agent
 
 # The manager holds no host privileges and reads no files, so it gets a
 # runtime with no shell, no package manager and a non-root uid.
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=build /out/manager /manager
+COPY --from=build /out/agent /agent
 USER 65532:65532
 ENTRYPOINT ["/manager"]

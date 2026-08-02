@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jailer-agent
+  namespace: jailer-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jailer-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jailer-agent
+subjects:
+  - kind: ServiceAccount
+    name: jailer-agent
+    namespace: jailer-system
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: jailer-agent
+  namespace: jailer-system
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jailer-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jailer-agent
+    spec:
+      serviceAccountName: jailer-agent
+      containers:
+        - name: agent
+          # One image holds both binaries; the entrypoint selects which.
+          image: jailer-operator:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/agent"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          args:
+            # The two drivers produce different cgroup layouts, and a wrong
+            # one enrolls a path that does not exist -- which the daemon
+            # accepts silently.
+            - --cgroup-driver=systemd
+          securityContext:
+            # The daemon's socket is 0755 root:root, and connecting to a unix
+            # socket needs write permission on it, so the agent has to share
+            # the daemon's uid. Everything else stays off: no capabilities, no
+            # privilege escalation, read-only root. The agent never touches a
+            # BPF map itself -- it asks the daemon to.
+            #
+            # The better fix belongs in jailer: give the socket a group and
+            # 0660, and run this with that supplemental group instead of uid 0.
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # Read-only: the agent only derives paths from this. Writing to
+            # BPF maps is the daemon's job, reached over the socket below.
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+              readOnly: true
+            - name: jailer-run
+              mountPath: /run/bpfjailer
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8081}
+            initialDelaySeconds: 15
+          readinessProbe:
+            httpGet: {path: /readyz, port: 8081}
+            initialDelaySeconds: 5
+          resources:
+            requests: {cpu: 10m, memory: 64Mi}
+            limits: {memory: 128Mi}
+      volumes:
+        - name: cgroup
+          hostPath: {path: /sys/fs/cgroup, type: Directory}
+        - name: jailer-run
+          hostPath: {path: /run/bpfjailer, type: DirectoryOrCreate}
+      tolerations:
+        - operator: Exists

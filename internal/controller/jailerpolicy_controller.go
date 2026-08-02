@@ -69,7 +69,7 @@ func (r *JailerPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, r.Status().Patch(ctx, &policy, client.MergeFrom(base))
 	}
 
-	matched, err := r.countMatchingPods(ctx, policy.Spec)
+	matched, enrolled, err := r.countPods(ctx, policy.Spec)
 	if err != nil {
 		setCondition(&policy, conditionDegraded, metav1.ConditionTrue, "SelectorError", err.Error())
 		setCondition(&policy, conditionReady, metav1.ConditionFalse, "SelectorError", err.Error())
@@ -80,6 +80,7 @@ func (r *JailerPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	policy.Status.MatchedPods = int32(matched)
+	policy.Status.EnrolledPods = int32(enrolled)
 	setCondition(&policy, conditionDegraded, metav1.ConditionFalse, "SpecAccepted",
 		"the spec is usable")
 	setCondition(&policy, conditionReady, metav1.ConditionTrue, "SpecAccepted",
@@ -88,29 +89,35 @@ func (r *JailerPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	return ctrl.Result{}, r.Status().Patch(ctx, &policy, client.MergeFrom(base))
 }
 
-func (r *JailerPolicyReconciler) countMatchingPods(ctx context.Context, spec v1alpha1.JailerPolicySpec) (int, error) {
+// countPods returns how many pods the selectors chose, and how many of those
+// the node agent has actually enrolled. The second number is the one that says
+// whether the policy is in force.
+func (r *JailerPolicyReconciler) countPods(ctx context.Context, spec v1alpha1.JailerPolicySpec) (matched, enrolled int, err error) {
 	var namespaces corev1.NamespaceList
 	if err := r.List(ctx, &namespaces); err != nil {
-		return 0, fmt.Errorf("listing namespaces: %w", err)
+		return 0, 0, fmt.Errorf("listing namespaces: %w", err)
 	}
 
-	count := 0
 	for _, ns := range namespaces.Items {
 		var pods corev1.PodList
 		if err := r.List(ctx, &pods, client.InNamespace(ns.Name)); err != nil {
-			return 0, fmt.Errorf("listing pods in %s: %w", ns.Name, err)
+			return 0, 0, fmt.Errorf("listing pods in %s: %w", ns.Name, err)
 		}
 		for _, pod := range pods.Items {
 			ok, err := selector.Matches(spec, ns.Labels, pod.Labels)
 			if err != nil {
-				return 0, err
+				return 0, 0, err
 			}
-			if ok {
-				count++
+			if !ok {
+				continue
+			}
+			matched++
+			if pod.Annotations[v1alpha1.AnnotationEnrolledRole] != "" {
+				enrolled++
 			}
 		}
 	}
-	return count, nil
+	return matched, enrolled, nil
 }
 
 func summarise(problems []error) string {

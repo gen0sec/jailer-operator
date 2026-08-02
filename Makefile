@@ -14,8 +14,10 @@ generate: controller-gen ## deepcopy methods
 	$(CONTROLLER_GEN) object:headerFile="" paths="./api/..."
 
 .PHONY: manifests
-manifests: controller-gen ## CRD yaml
+manifests: controller-gen ## CRD yaml and RBAC
 	$(CONTROLLER_GEN) crd paths="./api/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) rbac:roleName=jailer-operator paths="./internal/controller/..." output:rbac:artifacts:config=config/rbac
+	$(CONTROLLER_GEN) rbac:roleName=jailer-agent paths="./internal/agent/..." output:rbac:artifacts:config=config/rbac/agent
 
 .PHONY: fmt
 fmt:
@@ -50,12 +52,15 @@ install: manifests ## install the CRDs
 	kubectl apply -f config/crd/bases
 
 .PHONY: deploy
-deploy: install ## install RBAC and the manager
+deploy: install ## install RBAC, the manager and the node agent
 	kubectl apply -f config/manager/manager.yaml
 	kubectl apply -f config/rbac/role.yaml
 	kubectl apply -f config/rbac/leader_election_role.yaml
+	kubectl apply -f config/rbac/agent/role.yaml
+	kubectl apply -f config/agent/agent.yaml
 
 .PHONY: undeploy
 undeploy:
+	-kubectl delete -f config/agent/agent.yaml
 	-kubectl delete -f config/manager/manager.yaml
 	-kubectl delete -f config/rbac/role.yaml

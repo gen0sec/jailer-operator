@@ -79,6 +79,28 @@ func TestStatusCountsTheMatchedPods(t *testing.T) {
 	}
 }
 
+// A pod is only counted as enrolled once the agent has marked it, which it
+// does after the daemon accepts. Counting selected pods as enrolled would
+// report a policy in force before anything reached a map.
+func TestOnlyMarkedPodsCountAsEnrolled(t *testing.T) {
+	p := policy(v1alpha1.JailerPolicySpec{
+		PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}})
+	marked := pod("default", "web-1", map[string]string{"app": "web"})
+	marked.Annotations = map[string]string{v1alpha1.AnnotationEnrolledRole: "7"}
+
+	got, err := reconcileOnce(t, p, ns("default", nil), marked,
+		pod("default", "web-2", map[string]string{"app": "web"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status.MatchedPods != 2 {
+		t.Errorf("MatchedPods = %d, want 2", got.Status.MatchedPods)
+	}
+	if got.Status.EnrolledPods != 1 {
+		t.Errorf("EnrolledPods = %d, want 1 (only the marked pod)", got.Status.EnrolledPods)
+	}
+}
+
 func TestStatusRecordsTheObservedGeneration(t *testing.T) {
 	got, err := reconcileOnce(t, policy(v1alpha1.JailerPolicySpec{}), ns("default", nil))
 	if err != nil {

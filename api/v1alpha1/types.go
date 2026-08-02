@@ -113,3 +113,12 @@ type JailerPolicyList struct {
 func init() {
 	SchemeBuilder.Register(&JailerPolicy{}, &JailerPolicyList{})
 }
+
+// AnnotationEnrolledRole is written on a pod by the node agent once the
+// jailer daemon has accepted its enrollment, and carries the role id.
+//
+// It is what makes the difference between selected and enforced visible: the
+// controller counts matched pods carrying it, so a gap between MatchedPods and
+// EnrolledPods is policy that is not in force. Without a marker written after
+// the daemon accepts, a policy would look applied the moment it was created.
+const AnnotationEnrolledRole = "jailer.gen0sec.com/enrolled-role"
