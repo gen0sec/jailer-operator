@@ -82,20 +82,31 @@ spec:
                   type: object
                 type: array
               flags:
+                default: {}
                 description: |-
-                  Flags are the coarse capabilities a role permits. They are permissive by
-                  name: allow_x=false is a restriction. Merging ANDs them, so the most
-                  restrictive matching policy wins.
+                  Defaulted as an object so the per-flag defaults below actually apply:
+                  nested defaults only fire when the parent exists, so a spec that omits
+                  flags entirely would otherwise store nothing and leave the effective
+                  value invisible.
                 properties:
                   allowExec:
+                    default: true
                     type: boolean
                   allowFileAccess:
+                    default: true
                     type: boolean
                   allowNetwork:
+                    default: true
                     type: boolean
                   allowPtrace:
+                    default: true
+                    description: |-
+                      runc opens /proc/<pid>/ns/* while starting a container, which the kernel
+                      gates behind ptrace_may_access, so withholding this from a role that
+                      covers a pod slice stops its containers starting at all.
                     type: boolean
                   allowSetuid:
+                    default: true
                     type: boolean
                 type: object
               ipRules:

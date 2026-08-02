@@ -5,12 +5,34 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // Flags are the coarse capabilities a role permits. They are permissive by
 // name: allow_x=false is a restriction. Merging ANDs them, so the most
 // restrictive matching policy wins.
+// Every flag defaults to true, and the API server fills that in, so the value
+// that will be enforced is visible in the stored object rather than decided
+// later where nobody can see it.
+//
+// A permissive default cannot grant anything by accident: merging ANDs these,
+// so any policy that sets false still wins. The default only decides what
+// happens when no policy expressed an opinion, and "nobody withheld this"
+// should not mean "withhold it". Setting false is how a dimension becomes
+// default-deny, and it pairs with allow rules to make an allow-list.
 type Flags struct {
+	// +kubebuilder:default=true
+	// +optional
 	AllowFileAccess *bool `json:"allowFileAccess,omitempty"`
-	AllowNetwork    *bool `json:"allowNetwork,omitempty"`
-	AllowExec       *bool `json:"allowExec,omitempty"`
-	AllowSetuid     *bool `json:"allowSetuid,omitempty"`
-	AllowPtrace     *bool `json:"allowPtrace,omitempty"`
+	// +kubebuilder:default=true
+	// +optional
+	AllowNetwork *bool `json:"allowNetwork,omitempty"`
+	// +kubebuilder:default=true
+	// +optional
+	AllowExec *bool `json:"allowExec,omitempty"`
+	// +kubebuilder:default=true
+	// +optional
+	AllowSetuid *bool `json:"allowSetuid,omitempty"`
+	// runc opens /proc/<pid>/ns/* while starting a container, which the kernel
+	// gates behind ptrace_may_access, so withholding this from a role that
+	// covers a pod slice stops its containers starting at all.
+	// +kubebuilder:default=true
+	// +optional
+	AllowPtrace *bool `json:"allowPtrace,omitempty"`
 }
 
 type FilePathRule struct {
@@ -51,6 +73,12 @@ type JailerPolicySpec struct {
 	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
 	PodSelector       *metav1.LabelSelector `json:"podSelector,omitempty"`
 
+	// Defaulted as an object so the per-flag defaults below actually apply:
+	// nested defaults only fire when the parent exists, so a spec that omits
+	// flags entirely would otherwise store nothing and leave the effective
+	// value invisible.
+	// +kubebuilder:default={}
+	// +optional
 	Flags       Flags          `json:"flags,omitempty"`
 	FilePaths   []FilePathRule `json:"filePaths,omitempty"`
 	IPRules     []IPRule       `json:"ipRules,omitempty"`

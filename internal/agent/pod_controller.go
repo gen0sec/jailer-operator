@@ -144,11 +144,12 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // roleFor converts a merged policy into the daemon's role shape.
 //
-// A flag no policy set is sent as false. The daemon has no notion of unset,
-// and false is the restrictive reading: a capability nobody granted is not
-// granted.
+// A flag no policy set is sent as true, matching the CRD default. The daemon
+// has no notion of unset, and sending false would turn a policy that merely
+// lists denials into default-deny for that whole dimension -- the author wrote
+// a deny-list and would get everything blocked.
 func roleFor(id uint32, e *policy.Effective) jailer.Role {
-	on := func(v *bool) bool { return v != nil && *v }
+	on := func(v *bool) bool { return v == nil || *v }
 
 	role := jailer.Role{
 		ID:   id,

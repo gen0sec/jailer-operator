@@ -54,6 +54,8 @@ func Spec(s v1alpha1.JailerPolicySpec) []error {
 		errs = append(errs, validateProxy(s.Proxy.Address)...)
 	}
 
+	errs = append(errs, checkAllowRulesCanTakeEffect(s)...)
+
 	return errs
 }
 
@@ -77,5 +79,53 @@ func validateProxy(address string) []error {
 	if p, err := netip.ParseAddrPort(net.JoinHostPort("0.0.0.0", port)); err != nil || p.Port() == 0 {
 		errs = append(errs, fmt.Errorf("proxy.address: port %q is not usable", port))
 	}
+	return errs
+}
+
+// permissive reports whether a flag grants the capability. Unset counts as
+// granted: the CRD defaults these to true, and a flag nobody set has not been
+// used to withhold anything.
+func permissive(flag *bool) bool { return flag == nil || *flag }
+
+// checkAllowRulesCanTakeEffect catches the mirror image of a deny-list.
+//
+// Flags are the default and rules are exceptions: the engine consults a rule
+// and, finding none, falls back to the flag. So an allow rule only does
+// anything when the flag withholds the capability. Under a permissive flag the
+// rule is accepted, stored, and can never change an outcome -- indistinguishable
+// from enforcement unless you test the kernel.
+func checkAllowRulesCanTakeEffect(s v1alpha1.JailerPolicySpec) []error {
+	var errs []error
+
+	if permissive(s.Flags.AllowFileAccess) {
+		for i, r := range s.FilePaths {
+			if r.Allow {
+				errs = append(errs, fmt.Errorf(
+					"filePaths[%d]: an allow rule has no effect while allowFileAccess is true "+
+						"(it defaults to true); set allowFileAccess: false to make this an allow-list",
+					i))
+			}
+		}
+	}
+
+	if permissive(s.Flags.AllowNetwork) {
+		for i, r := range s.IPRules {
+			if r.Allow {
+				errs = append(errs, fmt.Errorf(
+					"ipRules[%d]: an allow rule has no effect while allowNetwork is true "+
+						"(it defaults to true); set allowNetwork: false to make this an allow-list",
+					i))
+			}
+		}
+		for i, r := range s.DomainRules {
+			if r.Allow {
+				errs = append(errs, fmt.Errorf(
+					"domainRules[%d]: an allow rule has no effect while allowNetwork is true "+
+						"(it defaults to true); set allowNetwork: false to make this an allow-list",
+					i))
+			}
+		}
+	}
+
 	return errs
 }
