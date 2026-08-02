@@ -49,6 +49,12 @@ func (r *JailerPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// Patch status against this copy rather than Update. Update carries the
+	// resourceVersion, so a status write races any other change to the object
+	// and fails with a conflict; pod and namespace events make that routine
+	// here, since every one of them enqueues every policy.
+	base := policy.DeepCopy()
+
 	policy.Status.ObservedGeneration = policy.Generation
 
 	if problems := validate.Spec(policy.Spec); len(problems) > 0 {
@@ -60,14 +66,14 @@ func (r *JailerPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			"the spec has problems that prevent it being applied")
 		policy.Status.MatchedPods = 0
 		policy.Status.EnrolledPods = 0
-		return ctrl.Result{}, r.Status().Update(ctx, &policy)
+		return ctrl.Result{}, r.Status().Patch(ctx, &policy, client.MergeFrom(base))
 	}
 
 	matched, err := r.countMatchingPods(ctx, policy.Spec)
 	if err != nil {
 		setCondition(&policy, conditionDegraded, metav1.ConditionTrue, "SelectorError", err.Error())
 		setCondition(&policy, conditionReady, metav1.ConditionFalse, "SelectorError", err.Error())
-		if updateErr := r.Status().Update(ctx, &policy); updateErr != nil {
+		if updateErr := r.Status().Patch(ctx, &policy, client.MergeFrom(base)); updateErr != nil {
 			return ctrl.Result{}, errors.Join(err, updateErr)
 		}
 		return ctrl.Result{}, err
@@ -79,7 +85,7 @@ func (r *JailerPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	setCondition(&policy, conditionReady, metav1.ConditionTrue, "SpecAccepted",
 		fmt.Sprintf("selects %d pod(s)", matched))
 
-	return ctrl.Result{}, r.Status().Update(ctx, &policy)
+	return ctrl.Result{}, r.Status().Patch(ctx, &policy, client.MergeFrom(base))
 }
 
 func (r *JailerPolicyReconciler) countMatchingPods(ctx context.Context, spec v1alpha1.JailerPolicySpec) (int, error) {

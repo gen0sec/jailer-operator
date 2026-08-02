@@ -1,0 +1,30 @@
+# Leader election needs a lease in the operator's own namespace, and the event
+# recorder needs to write events there. Deliberately a namespaced Role rather
+# than part of the ClusterRole: nothing here should be cluster-wide, and the
+# generated ClusterRole covers only what the controller itself reads.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jailer-operator-leader-election
+  namespace: jailer-system
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jailer-operator-leader-election
+  namespace: jailer-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: jailer-operator-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: jailer-operator
+    namespace: jailer-system

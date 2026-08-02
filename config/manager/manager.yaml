@@ -45,6 +45,9 @@ spec:
       containers:
         - name: manager
           image: jailer-operator:latest
+          # The image is built and side-loaded rather than pulled, so Always
+          # would fail on a cluster with no registry holding it.
+          imagePullPolicy: IfNotPresent
           args:
             - --leader-elect
           # The manager only resolves policy and writes status. Enforcement is

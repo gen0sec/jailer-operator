@@ -31,5 +31,31 @@ test:
 
 .PHONY: verify
 verify: generate manifests ## fail if generated files are stale
+	@./hack/check-go-version.sh
 	@git diff --exit-code -- api config || \
 		{ echo; echo "generated files are out of date -- run 'make generate manifests'"; exit 1; }
+
+IMG ?= jailer-operator:latest
+
+.PHONY: docker-build
+docker-build: ## build the manager image
+	docker build -t $(IMG) .
+
+.PHONY: docker-save
+docker-save: docker-build ## export the image for side-loading into a cluster
+	docker save $(IMG) -o jailer-operator.tar
+
+.PHONY: install
+install: manifests ## install the CRDs
+	kubectl apply -f config/crd/bases
+
+.PHONY: deploy
+deploy: install ## install RBAC and the manager
+	kubectl apply -f config/manager/manager.yaml
+	kubectl apply -f config/rbac/role.yaml
+	kubectl apply -f config/rbac/leader_election_role.yaml
+
+.PHONY: undeploy
+undeploy:
+	-kubectl delete -f config/manager/manager.yaml
+	-kubectl delete -f config/rbac/role.yaml
