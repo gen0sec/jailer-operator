@@ -104,7 +104,12 @@ func (r *JailerPolicyReconciler) countPods(ctx context.Context, spec v1alpha1.Ja
 			return 0, 0, fmt.Errorf("listing pods in %s: %w", ns.Name, err)
 		}
 		for _, pod := range pods.Items {
-			ok, err := selector.Matches(spec, ns.Labels, pod.Labels)
+			ok, err := selector.Matches(spec, selector.Target{
+				NamespaceLabels:      ns.Labels,
+				NamespaceAnnotations: ns.Annotations,
+				PodLabels:            pod.Labels,
+				PodAnnotations:       pod.Annotations,
+			})
 			if err != nil {
 				return 0, 0, err
 			}

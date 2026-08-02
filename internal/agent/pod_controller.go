@@ -24,6 +24,7 @@ import (
 	"github.com/gen0sec/jailer-operator/internal/enroll"
 	"github.com/gen0sec/jailer-operator/internal/jailer"
 	"github.com/gen0sec/jailer-operator/internal/policy"
+	"github.com/gen0sec/jailer-operator/internal/selector"
 )
 
 // Enroller is the part of the jailer daemon client the agent uses.
@@ -77,12 +78,16 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	plan, err := enroll.Plan(enroll.Pod{
-		UID:       string(pod.UID),
-		Namespace: pod.Namespace,
-		Name:      pod.Name,
-		QoSClass:  string(pod.Status.QOSClass),
-		Labels:    pod.Labels,
-	}, namespace.Labels, policies.Items, r.CgroupRoot, r.Driver, r.IDs)
+		UID:         string(pod.UID),
+		Namespace:   pod.Namespace,
+		Name:        pod.Name,
+		QoSClass:    string(pod.Status.QOSClass),
+		Labels:      pod.Labels,
+		Annotations: pod.Annotations,
+	}, selector.Target{
+		NamespaceLabels:      namespace.Labels,
+		NamespaceAnnotations: namespace.Annotations,
+	}, policies.Items, r.CgroupRoot, r.Driver, r.IDs)
 
 	if err != nil {
 		// A pod that is not yet scheduled has no QoS class, so its path is not
@@ -96,9 +101,12 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	if plan == nil {
-		// No policy applies. Marking it would make an unenrolled pod count as
-		// enforced.
-		return ctrl.Result{}, nil
+		// No policy applies. If this pod was enrolled before -- a policy was
+		// edited, a label changed, an opt-in was withdrawn -- the enrollment
+		// has to be undone, or the pod stays jailed in the kernel under a role
+		// nothing grants it any more. That is enforcement with no trace left
+		// in the API, which is worse than none.
+		return ctrl.Result{}, r.unenroll(ctx, &pod)
 	}
 
 	// The role has to exist before anything names it.
@@ -132,6 +140,32 @@ func (r *PodReconciler) mark(ctx context.Context, pod *corev1.Pod, roleID uint32
 	pod.Annotations[v1alpha1.AnnotationEnrolledRole] = want
 	// Patched rather than updated: pods are written by the kubelet constantly,
 	// and an Update here would lose races it does not need to enter.
+	return r.Patch(ctx, pod, client.MergeFrom(base))
+}
+
+// unenroll undoes a previous enrollment for a pod that no longer matches.
+//
+// The cgroup path is derived the same way it was to enroll: the pod slice
+// still exists while the pod does, and it is what was named originally.
+func (r *PodReconciler) unenroll(ctx context.Context, pod *corev1.Pod) error {
+	if pod.Annotations[v1alpha1.AnnotationEnrolledRole] == "" {
+		// Never enrolled. Asking the daemon to remove nothing would be noise
+		// on every reconcile of every unselected pod on the node.
+		return nil
+	}
+
+	path, err := cgroup.PodSlice(r.CgroupRoot, r.Driver, string(pod.Status.QOSClass), string(pod.UID))
+	if err != nil {
+		return fmt.Errorf("unenrolling %s/%s: %w", pod.Namespace, pod.Name, err)
+	}
+	if err := r.Jailer.RemoveCgroup(ctx, path); err != nil {
+		return fmt.Errorf("unenrolling %s/%s: %w", pod.Namespace, pod.Name, err)
+	}
+
+	// Cleared only after the daemon has dropped it, so the marker never says
+	// less than what is enforced.
+	base := pod.DeepCopy()
+	delete(pod.Annotations, v1alpha1.AnnotationEnrolledRole)
 	return r.Patch(ctx, pod, client.MergeFrom(base))
 }
 

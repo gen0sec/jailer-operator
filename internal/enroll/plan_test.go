@@ -9,6 +9,7 @@ import (
 	"github.com/gen0sec/jailer-operator/api/v1alpha1"
 	"github.com/gen0sec/jailer-operator/internal/cgroup"
 	"github.com/gen0sec/jailer-operator/internal/roleid"
+	"github.com/gen0sec/jailer-operator/internal/selector"
 )
 
 func webPolicy() v1alpha1.JailerPolicy {
@@ -29,7 +30,7 @@ func aPod() Pod {
 
 func plan(t *testing.T, pod Pod, policies []v1alpha1.JailerPolicy) (*Enrollment, error) {
 	t.Helper()
-	return Plan(pod, nil, policies, "/sys/fs/cgroup", cgroup.Systemd, roleid.New(roleid.DefaultCapacity))
+	return Plan(pod, selector.Target{}, policies, "/sys/fs/cgroup", cgroup.Systemd, roleid.New(roleid.DefaultCapacity))
 }
 
 func TestAMatchingPolicyProducesThePodSliceEnrollment(t *testing.T) {
@@ -111,8 +112,8 @@ func TestPodsUnderTheSamePolicyShareARole(t *testing.T) {
 	one := aPod()
 	two := aPod()
 	two.UID = "99999999-8888-7777-6666-555555555555"
-	a, _ := Plan(one, nil, []v1alpha1.JailerPolicy{webPolicy()}, "/sys/fs/cgroup", cgroup.Systemd, ids)
-	b, _ := Plan(two, nil, []v1alpha1.JailerPolicy{webPolicy()}, "/sys/fs/cgroup", cgroup.Systemd, ids)
+	a, _ := Plan(one, selector.Target{}, []v1alpha1.JailerPolicy{webPolicy()}, "/sys/fs/cgroup", cgroup.Systemd, ids)
+	b, _ := Plan(two, selector.Target{}, []v1alpha1.JailerPolicy{webPolicy()}, "/sys/fs/cgroup", cgroup.Systemd, ids)
 	if a.RoleID != b.RoleID {
 		t.Errorf("same policy gave role %d and %d", a.RoleID, b.RoleID)
 	}

@@ -14,7 +14,7 @@ func spec(ns, pod *metav1.LabelSelector) v1alpha1.JailerPolicySpec {
 
 func mustMatch(t *testing.T, s v1alpha1.JailerPolicySpec, ns, pod map[string]string, want bool) {
 	t.Helper()
-	got, err := Matches(s, ns, pod)
+	got, err := Matches(s, Target{NamespaceLabels: ns, PodLabels: pod})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestAnInvalidSelectorIsAnErrorNotANonMatch(t *testing.T) {
 			Key: "tier", Operator: metav1.LabelSelectorOpIn, Values: nil, // In with no values
 		}},
 	})
-	if _, err := Matches(s, nil, nil); err == nil {
+	if _, err := Matches(s, Target{}); err == nil {
 		t.Error("an invalid selector must surface as an error")
 	}
 }
@@ -88,7 +88,7 @@ func TestSelectReturnsOnlyMatchingPolicies(t *testing.T) {
 	all := v1alpha1.JailerPolicy{Spec: spec(nil, nil)}
 	all.Name = "baseline"
 
-	got, err := Select([]v1alpha1.JailerPolicy{web, db, all}, nil, map[string]string{"app": "web"})
+	got, err := Select([]v1alpha1.JailerPolicy{web, db, all}, Target{PodLabels: map[string]string{"app": "web"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestSelectReportsAnInvalidPolicyByName(t *testing.T) {
 		}}})}
 	bad.Name = "malformed"
 
-	_, err := Select([]v1alpha1.JailerPolicy{bad}, nil, nil)
+	_, err := Select([]v1alpha1.JailerPolicy{bad}, Target{})
 	if err == nil {
 		t.Fatal("want an error")
 	}

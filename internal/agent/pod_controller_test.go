@@ -233,3 +233,44 @@ func TestTheRoleIsDefinedBeforeTheEnrollment(t *testing.T) {
 		t.Errorf("the role reached the daemon without its rules: %+v", j.defined[0])
 	}
 }
+
+// A pod stops matching when a policy is edited, a label changes, or an opt-in
+// annotation is removed. If nothing undoes the enrollment the pod stays jailed
+// in the kernel under a role no policy grants it -- enforcement that no longer
+// appears anywhere in the API.
+func TestAPodThatStopsMatchingIsUnenrolled(t *testing.T) {
+	j := &fakeJailer{}
+	pod := aPod("node-a", map[string]string{"app": "db"}) // no longer selected
+	pod.Annotations = map[string]string{v1alpha1.AnnotationEnrolledRole: "734"}
+
+	got, err := run(t, j, webPolicy(),
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}, pod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(j.removed) != 1 {
+		t.Fatalf("want the enrollment removed, got %v", j.removed)
+	}
+	want := "/sys/fs/cgroup/kubepods.slice/kubepods-besteffort.slice/" +
+		"kubepods-besteffort-pod55989c3a_8ea8_48d7_9e1e_3c078902d007.slice"
+	if j.removed[0] != want {
+		t.Errorf("\n got: %s\nwant: %s", j.removed[0], want)
+	}
+	if got.Annotations[v1alpha1.AnnotationEnrolledRole] != "" {
+		t.Error("the marker must go too, or the pod still counts as enrolled")
+	}
+}
+
+// A pod that never matched has nothing to undo, and asking the daemon to
+// remove an enrollment it does not have would be noise on every reconcile.
+func TestAnUnmarkedPodIsNotUnenrolled(t *testing.T) {
+	j := &fakeJailer{}
+	if _, err := run(t, j, webPolicy(),
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		aPod("node-a", map[string]string{"app": "db"})); err != nil {
+		t.Fatal(err)
+	}
+	if len(j.removed) != 0 {
+		t.Errorf("nothing was enrolled, so nothing should be removed: %v", j.removed)
+	}
+}

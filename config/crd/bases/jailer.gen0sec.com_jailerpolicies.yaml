@@ -128,10 +128,115 @@ spec:
                   - direction
                   type: object
                 type: array
+              namespaceAnnotationSelector:
+                description: |-
+                  NamespaceAnnotationSelector and PodAnnotationSelector match annotations
+                  instead of labels. They reuse the label selector shape, so
+                  matchExpressions works exactly as it does above rather than being a
+                  second dialect.
+
+                  Kubernetes has no annotation index, so unlike labels these can never be
+                  pushed down to the API server. That costs nothing here -- the controller
+                  already evaluates every selector itself, and the agent already narrows
+                  to its own node by field selector -- but it does rule out server-side
+                  filtering as a later optimisation.
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                          type: string
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
               namespaceSelector:
                 description: |-
                   NamespaceSelector and PodSelector together choose the pods this policy
                   applies to. A nil NamespaceSelector means every namespace.
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                          type: string
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
+              podAnnotationSelector:
+                description: |-
+                  A label selector is a label query over a set of resources. The result of matchLabels and
+                  matchExpressions are ANDed. An empty label selector matches all objects. A null
+                  label selector matches no objects.
                 properties:
                   matchExpressions:
                     description: matchExpressions is a list of label selector requirements.
@@ -239,6 +344,16 @@ spec:
                 - address
                 - required
                 type: object
+              requireOptIn:
+                description: |-
+                  RequireOptIn narrows the policy to pods carrying
+                  jailer.gen0sec.com/opt-in: "true".
+
+                  This is the ergonomic form of a PodAnnotationSelector on that key: one
+                  well-known name, so a staged rollout does not depend on spelling an
+                  annotation identically in every policy. It only ever narrows -- a pod
+                  that opts in still has to satisfy the other selectors.
+                type: boolean
             type: object
           status:
             description: |-

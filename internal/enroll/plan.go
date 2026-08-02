@@ -20,11 +20,12 @@ import (
 
 // Pod is the part of a pod this decision needs.
 type Pod struct {
-	UID       string
-	Namespace string
-	Name      string
-	QoSClass  string
-	Labels    map[string]string
+	UID         string
+	Namespace   string
+	Name        string
+	QoSClass    string
+	Labels      map[string]string
+	Annotations map[string]string
 }
 
 // Enrollment is what the agent sends to the jailer daemon.
@@ -55,10 +56,15 @@ func podID(uid string) uint64 {
 //
 // Returning nil rather than an empty role matters: a pod enrolled with a role
 // that permits everything looks enforced from the outside and is not.
-func Plan(pod Pod, nsLabels map[string]string, policies []v1alpha1.JailerPolicy,
+func Plan(pod Pod, namespace selector.Target, policies []v1alpha1.JailerPolicy,
 	root string, driver cgroup.Driver, ids IDAllocator) (*Enrollment, error) {
 
-	matched, err := selector.Select(policies, nsLabels, pod.Labels)
+	matched, err := selector.Select(policies, selector.Target{
+		NamespaceLabels:      namespace.NamespaceLabels,
+		NamespaceAnnotations: namespace.NamespaceAnnotations,
+		PodLabels:            pod.Labels,
+		PodAnnotations:       pod.Annotations,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("pod %s/%s: %w", pod.Namespace, pod.Name, err)
 	}

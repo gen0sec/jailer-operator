@@ -73,6 +73,31 @@ type JailerPolicySpec struct {
 	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
 	PodSelector       *metav1.LabelSelector `json:"podSelector,omitempty"`
 
+	// NamespaceAnnotationSelector and PodAnnotationSelector match annotations
+	// instead of labels. They reuse the label selector shape, so
+	// matchExpressions works exactly as it does above rather than being a
+	// second dialect.
+	//
+	// Kubernetes has no annotation index, so unlike labels these can never be
+	// pushed down to the API server. That costs nothing here -- the controller
+	// already evaluates every selector itself, and the agent already narrows
+	// to its own node by field selector -- but it does rule out server-side
+	// filtering as a later optimisation.
+	// +optional
+	NamespaceAnnotationSelector *metav1.LabelSelector `json:"namespaceAnnotationSelector,omitempty"`
+	// +optional
+	PodAnnotationSelector *metav1.LabelSelector `json:"podAnnotationSelector,omitempty"`
+
+	// RequireOptIn narrows the policy to pods carrying
+	// jailer.gen0sec.com/opt-in: "true".
+	//
+	// This is the ergonomic form of a PodAnnotationSelector on that key: one
+	// well-known name, so a staged rollout does not depend on spelling an
+	// annotation identically in every policy. It only ever narrows -- a pod
+	// that opts in still has to satisfy the other selectors.
+	// +optional
+	RequireOptIn *bool `json:"requireOptIn,omitempty"`
+
 	// Defaulted as an object so the per-flag defaults below actually apply:
 	// nested defaults only fire when the parent exists, so a spec that omits
 	// flags entirely would otherwise store nothing and leave the effective
@@ -150,3 +175,8 @@ func init() {
 // EnrolledPods is policy that is not in force. Without a marker written after
 // the daemon accepts, a policy would look applied the moment it was created.
 const AnnotationEnrolledRole = "jailer.gen0sec.com/enrolled-role"
+
+// AnnotationOptIn marks a pod as willing to be governed by policies that set
+// RequireOptIn. Only the exact value "true" counts: anything else, including
+// an empty value, is not an opt-in.
+const AnnotationOptIn = "jailer.gen0sec.com/opt-in"
