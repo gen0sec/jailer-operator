@@ -1,0 +1,31 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jailer-operator
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - jailer.gen0sec.com
+  resources:
+  - jailerpolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - jailer.gen0sec.com
+  resources:
+  - jailerpolicies/status
+  verbs:
+  - get
+  - patch
+  - update
