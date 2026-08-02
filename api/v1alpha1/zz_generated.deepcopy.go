@@ -166,6 +166,21 @@ func (in *JailerPolicySpec) DeepCopyInto(out *JailerPolicySpec) {
 		*out = new(v1.LabelSelector)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.NamespaceAnnotationSelector != nil {
+		in, out := &in.NamespaceAnnotationSelector, &out.NamespaceAnnotationSelector
+		*out = new(v1.LabelSelector)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.PodAnnotationSelector != nil {
+		in, out := &in.PodAnnotationSelector, &out.PodAnnotationSelector
+		*out = new(v1.LabelSelector)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.RequireOptIn != nil {
+		in, out := &in.RequireOptIn, &out.RequireOptIn
+		*out = new(bool)
+		**out = **in
+	}
 	in.Flags.DeepCopyInto(&out.Flags)
 	if in.FilePaths != nil {
 		in, out := &in.FilePaths, &out.FilePaths
